@@ -6,102 +6,104 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="stylesheet" href="style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="icon" href="https://i.imgur.com/OnjVZqV.png" type="image/png">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 <body>
-  <div class="app-bg">
-    <div class="bg-pattern"></div>
-  </div>
+  <div class="app-bg"></div>
   <div class="container">
     <header>
       <div class="logo">
-        <img src="https://i.imgur.com/OnjVZqV.png" alt="Modrinth Bulk Logo" />
-        <span>Modrinth Bulk Downloader</span>
+        <img src="https://i.imgur.com/4V5NAwx.png" alt="Modrinth Bulk Logo" />
+        <span>Modrinth Bulk Mod Downloader</span>
       </div>
       <div class="subtext">Find, filter, and download mods for your modpack in bulk!</div>
     </header>
     
-    <div class="content-wrapper">
+    <div class="filter-container">
       <form id="filterForm" class="filter-form">
-        <div class="search-container">
-          <input id="searchBox" type="text" placeholder="Search mods...">
-          <span class="search-icon">🔍</span>
-        </div>
-        
-        <div class="filter-controls">
-          <div class="filter-row">
-            <div class="form-group">
-              <label for="mcVersion">Minecraft Version</label>
-              <select id="mcVersion" class="select-styled"></select>
-            </div>
-            <div class="form-group">
-              <label for="modLoader">Mod Loader</label>
-              <select id="modLoader" class="select-styled">
-                <option value="fabric">Fabric</option>
-                <option value="forge">Forge</option>
-                <option value="neoforge">NeoForge</option>
-                <option value="quilt">Quilt</option>
-              </select>
-            </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="mcVersion">Version</label>
+            <select id="mcVersion" class="styled-select"></select>
           </div>
-          
-          <div class="filter-row">
-            <div class="form-group">
-              <label for="category">Category</label>
-              <select id="category" class="select-styled">
-                <option value="">All Categories</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label for="sortOrder">Sort By</label>
-              <select id="sortOrder" class="select-styled">
-                <option value="relevance">Relevance</option>
-                <option value="downloads">Most Downloaded</option>
-                <option value="newest">Newest</option>
-                <option value="updated">Recently Updated</option>
-                <option value="follows">Most Followed</option>
-              </select>
-            </div>
+          <div class="form-group">
+            <label for="modLoader">Loader</label>
+            <select id="modLoader" class="styled-select">
+              <option value="fabric">Fabric</option>
+              <option value="forge">Forge</option>
+              <option value="neoforge">NeoForge</option>
+              <option value="quilt">Quilt</option>
+            </select>
           </div>
-          
-          <button type="submit" id="showModsBtn" class="primary-button">
-            <span class="button-icon">🔄</span>
-            <span>Update Results</span>
+          <div class="form-group">
+            <label for="category">Category</label>
+            <select id="category" class="styled-select">
+              <option value="">All</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="sortOrder">Sort</label>
+            <select id="sortOrder" class="styled-select">
+              <option value="relevance">Relevance</option>
+              <option value="downloads">Downloads</option>
+              <option value="newest">Newest</option>
+              <option value="updated">Recently Updated</option>
+              <option value="follows">Followers</option>
+            </select>
+          </div>
+          <button type="submit" id="showModsBtn">
+            <i class="fas fa-search"></i> Show Mods
           </button>
+        </div>
+        <div class="form-row search-row">
+          <div class="search-container">
+            <i class="fas fa-search search-icon"></i>
+            <input id="searchBox" type="text" placeholder="Search mods...">
+          </div>
+          <div class="view-toggle">
+            <span>View:</span>
+            <button type="button" class="view-btn active" data-view="grid">
+              <i class="fas fa-th-large"></i>
+            </button>
+            <button type="button" class="view-btn" data-view="list">
+              <i class="fas fa-list"></i>
+            </button>
+            <button type="button" class="view-btn" data-view="small-grid">
+              <i class="fas fa-th"></i>
+            </button>
+            <button type="button" class="view-btn" data-view="small-list">
+              <i class="fas fa-bars"></i>
+            </button>
+          </div>
         </div>
       </form>
       
-      <div class="results-container">
-        <div class="results-header">
-          <div class="results-count" id="resultsCount">Loading mods...</div>
-          <div class="selection-info" id="selectionInfo"></div>
-        </div>
-        
-        <div id="modList" class="mod-list">
-          <div class="loading-spinner">
-            <div class="spinner"></div>
-            <p>Loading mods...</p>
-          </div>
-        </div>
-        
-        <div class="action-bar">
-          <button id="selectAllBtn" class="secondary-button">Select All</button>
-          <button id="downloadBtn" class="primary-button" disabled>
-            <span class="button-icon">⬇️</span>
-            <span>Download Selected Mods</span>
-          </button>
-        </div>
+      <div class="categories-wrapper">
+        <div id="categoryTags" class="category-tags"></div>
       </div>
-      
-      <div id="status" class="status-panel"></div>
+    </div>
+    
+    <div id="modList" class="mod-list grid-view"></div>
+    
+    <div class="mod-pagination">
+      <button id="loadMoreBtn" class="load-more-btn">Load More</button>
+    </div>
+    
+    <div class="action-bar">
+      <div class="selected-count">
+        <span id="selectedCount">0</span> mods selected
+      </div>
+      <button id="downloadBtn" disabled>
+        <i class="fas fa-download"></i> Download Selected Mods
+      </button>
+      <span id="status"></span>
     </div>
     
     <footer>
-      <p class="footer-text">
-        <span>Made for Minecraft modpack creators ❤️</span>
-        <span>Powered by <a href="https://modrinth.com/" target="_blank">Modrinth API</a></span>
-        <span>Open source on <a href="https://github.com/BrysWU/bulkmods" target="_blank">GitHub</a></span>
+      <p>
+        <span>Made for Minecraft modpack makers. Powered by <a href="https://modrinth.com/" target="_blank">Modrinth API</a>.</span>
+        <span>Open source on <a href="https://github.com/BrysWU/modrinth-bulk-downloader" target="_blank">GitHub</a></span>
       </p>
     </footer>
   </div>

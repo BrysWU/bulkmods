@@ -6,61 +6,44 @@ const downloadBtn = document.getElementById('downloadBtn');
 const statusDiv = document.getElementById('status');
 const searchBox = document.getElementById('searchBox');
 const filterForm = document.getElementById('filterForm');
-const showModsBtn = document.getElementById('showModsBtn');
 const categorySelect = document.getElementById('category');
 const sortOrderSelect = document.getElementById('sortOrder');
-const resultsCount = document.getElementById('resultsCount');
-const selectionInfo = document.getElementById('selectionInfo');
-const selectAllBtn = document.getElementById('selectAllBtn');
+const categoryTagsDiv = document.getElementById('categoryTags');
+const selectedCountSpan = document.getElementById('selectedCount');
+const loadMoreBtn = document.getElementById('loadMoreBtn');
+const viewButtons = document.querySelectorAll('.view-btn');
 
 let allMods = [];
 let shownMods = [];
 let selectedMods = new Set();
 let categories = [];
+let currentView = 'grid';
+let currentPage = 1;
+let pageSize = 20;
+let totalPages = 1;
+let activeCategoryTags = new Set();
 let isLoading = false;
 
-// Handle select all button
-selectAllBtn.addEventListener('click', () => {
-  const checkboxes = document.querySelectorAll('.mod-checkbox');
-  
-  if (selectedMods.size === shownMods.length) {
-    // Deselect all
-    selectedMods.clear();
-    checkboxes.forEach(cb => cb.checked = false);
-    selectAllBtn.textContent = "Select All";
-  } else {
-    // Select all
-    shownMods.forEach(mod => selectedMods.add(mod.slug));
-    checkboxes.forEach(cb => cb.checked = true);
-    selectAllBtn.textContent = "Deselect All";
-  }
-  
-  updateSelectedCount();
-  downloadBtn.disabled = selectedMods.size === 0;
-});
-
-function updateSelectedCount() {
-  if (selectedMods.size > 0) {
-    selectionInfo.textContent = `${selectedMods.size} mods selected`;
-    selectionInfo.style.display = 'block';
-  } else {
-    selectionInfo.style.display = 'none';
-  }
-  
-  if (selectedMods.size === shownMods.length && shownMods.length > 0) {
-    selectAllBtn.textContent = "Deselect All";
-  } else {
-    selectAllBtn.textContent = "Select All";
-  }
+// Function to initialize view mode
+function initViewMode() {
+  viewButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      viewButtons.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentView = btn.dataset.view;
+      modListDiv.className = `mod-list ${currentView}-view`;
+      renderVisibleMods();
+    });
+  });
 }
 
+// Fetch Minecraft versions
 async function fetchVersions() {
-  setLoading(true);
-  statusDiv.innerHTML = "<div class='status-message loading'>Loading Minecraft versions...</div>";
+  statusDiv.textContent = "Loading Minecraft versions...";
   try {
     let resp = await fetch(`${MODRINTH_API}/tag/game_version`);
     let versions = await resp.json();
-    let stable = versions.filter(v => !v.version.endsWith("-rc") && !v.version.includes("w") && !v.version.includes("pre"))
+    let stable = versions.filter(v => !v.version.endsWith("-rc"))
       .map(v => v.version);
     stable = Array.from(new Set(stable));
     stable.sort((a,b) => b.localeCompare(a, undefined, {numeric:true, sensitivity:'base'}));
@@ -72,100 +55,143 @@ async function fetchVersions() {
       mcVersionSelect.appendChild(opt);
     });
     mcVersionSelect.value = stable.find(v => v === "1.20.1") || stable[0];
-    clearStatus();
+    statusDiv.textContent = "";
   } catch (e) {
     mcVersionSelect.innerHTML = "<option value='1.20.1'>1.20.1</option><option value='1.18.2'>1.18.2</option>";
-    showError("Failed to load versions.");
-  } finally {
-    setLoading(false);
+    statusDiv.textContent = "Failed to load versions.";
   }
 }
 
+// Fetch categories
 async function fetchCategories() {
   try {
     let resp = await fetch(`${MODRINTH_API}/tag/category`);
     let cats = await resp.json();
     categories = cats.filter(cat =>
-      ['technology', 'magic', 'storage', 'food', 'economy', 'adventure', 
-       'equipment', 'library', 'misc', 'optimization', 'social', 'utility', 
-       'worldgen', 'decoration', 'cursed', 'fabric', 'forge', 'quilt'].includes(cat.name) ||
+      ['technology','magic','storage','food','economy','adventure','equipment','library','misc','optimization','social','utility','worldgen'].includes(cat.name) ||
       cat.project_type === 'mod'
     );
     
-    // Sort categories alphabetically
-    categories.sort((a, b) => a.name.localeCompare(b.name));
-    
     // Populate category dropdown
-    categorySelect.innerHTML = "<option value=''>All Categories</option>";
+    categorySelect.innerHTML = "<option value=''>All</option>";
     categories.forEach(cat => {
       let opt = document.createElement("option");
       opt.value = cat.name;
-      opt.textContent = cat.display_name || (cat.name.charAt(0).toUpperCase() + cat.name.slice(1));
+      opt.textContent = cat.name.charAt(0).toUpperCase() + cat.name.slice(1);
       categorySelect.appendChild(opt);
     });
+    
+    // Create category tags
+    renderCategoryTags();
   } catch (e) {
-    categorySelect.innerHTML = "<option value=''>All Categories</option>";
-    showError("Failed to load categories.");
+    categorySelect.innerHTML = "<option value=''>All</option>";
   }
 }
 
-async function fetchMods(version, loader, query = "", category = "", sortOrder = "relevance") {
-  setLoading(true);
-  showModsBtn.disabled = true;
-  statusDiv.innerHTML = "<div class='status-message loading'>Loading mods...</div>";
-  let mods = [];
-  let limit = 100;
-  let offset = 0;
-  let sort_param = sortOrder;
-  let facetsArr = [
-    ["project_type:mod"],
-    [`versions:${version}`],
-    [`categories:${loader}`],
-  ];
-  if (category) facetsArr.push([`categories:${category}`]);
-  let facets = encodeURIComponent(JSON.stringify(facetsArr));
+// Render category tags
+function renderCategoryTags() {
+  categoryTagsDiv.innerHTML = "";
+  if (!categories.length) return;
   
-  try {
-    while (true) {
-      let url = `${MODRINTH_API}/search?limit=${limit}&offset=${offset}&facets=${facets}&index=${sort_param}`;
-      if (query) url += `&query=${encodeURIComponent(query)}`;
-      
-      let resp = await fetch(url);
-      let json = await resp.json();
-      mods = mods.concat(json.hits);
-      
-      if (json.hits.length < limit) break;
-      offset += limit;
+  // Add "All" tag
+  const allTag = document.createElement("span");
+  allTag.className = "category-tag";
+  if (activeCategoryTags.size === 0) allTag.classList.add("active");
+  allTag.textContent = "All";
+  allTag.addEventListener("click", () => {
+    activeCategoryTags.clear();
+    categorySelect.value = "";
+    renderCategoryTags();
+    reloadMods();
+  });
+  categoryTagsDiv.appendChild(allTag);
+  
+  // Add category tags
+  categories.forEach(cat => {
+    if (!['technology','magic','storage','food','adventure','equipment','library','optimization','utility','worldgen'].includes(cat.name)) {
+      return;
     }
     
-    resultsCount.textContent = `Found ${mods.length} mods`;
-    clearStatus();
-    return mods;
+    const tagSpan = document.createElement("span");
+    tagSpan.className = "category-tag";
+    if (activeCategoryTags.has(cat.name)) tagSpan.classList.add("active");
+    tagSpan.textContent = cat.name.charAt(0).toUpperCase() + cat.name.slice(1);
+    tagSpan.addEventListener("click", () => {
+      if (activeCategoryTags.has(cat.name)) {
+        activeCategoryTags.delete(cat.name);
+      } else {
+        activeCategoryTags.add(cat.name);
+      }
+      categorySelect.value = activeCategoryTags.size === 1 ? [...activeCategoryTags][0] : "";
+      renderCategoryTags();
+      reloadMods();
+    });
+    categoryTagsDiv.appendChild(tagSpan);
+  });
+}
+
+// Fetch mods with pagination
+async function fetchMods(version, loader, query = "", category = "", sortOrder = "relevance", page = 1) {
+  statusDiv.textContent = "Loading mods...";
+  loadMoreBtn.disabled = true;
+  loadMoreBtn.classList.add('loading');
+  isLoading = true;
+  
+  try {
+    let offset = (page - 1) * pageSize;
+    let limit = pageSize;
+    
+    let facetsArr = [
+      ["project_type:mod"],
+      [`versions:${version}`],
+      [`categories:${loader}`],
+    ];
+    
+    // Handle multiple categories
+    if (activeCategoryTags.size > 0) {
+      activeCategoryTags.forEach(cat => {
+        facetsArr.push([`categories:${cat}`]);
+      });
+    } else if (category) {
+      facetsArr.push([`categories:${category}`]);
+    }
+    
+    let facets = encodeURIComponent(JSON.stringify(facetsArr));
+    let url = `${MODRINTH_API}/search?limit=${limit}&offset=${offset}&facets=${facets}&index=${sortOrder}`;
+    if (query) url += `&query=${encodeURIComponent(query)}`;
+    
+    let resp = await fetch(url);
+    let json = await resp.json();
+    
+    // Calculate total pages
+    totalPages = Math.ceil(json.total_hits / pageSize);
+    
+    // Update load more button visibility
+    loadMoreBtn.style.display = page >= totalPages ? 'none' : 'block';
+    
+    return json.hits;
   } catch (e) {
-    showError(`Failed to fetch mods: ${e}`);
+    statusDiv.textContent = "Failed to fetch mods: " + e;
     return [];
   } finally {
-    showModsBtn.disabled = false;
-    setLoading(false);
+    loadMoreBtn.disabled = false;
+    loadMoreBtn.classList.remove('loading');
+    isLoading = false;
   }
 }
 
-function renderMods(mods) {
+// Render mods with the current view
+function renderVisibleMods() {
   modListDiv.innerHTML = "";
+  modListDiv.className = `mod-list ${currentView}-view`;
   
-  if (!mods.length) {
-    modListDiv.innerHTML = `
-      <div class="no-results">
-        <div class="no-results-icon">🔍</div>
-        <h3>No mods found</h3>
-        <p>Try adjusting your search filters or try a different Minecraft version</p>
-      </div>
-    `;
+  if (!shownMods.length) {
+    modListDiv.innerHTML = "<p class='empty-state'>No mods found for this version/loader/category.</p>";
     downloadBtn.disabled = true;
     return;
   }
   
-  mods.forEach((mod, idx) => {
+  shownMods.forEach((mod, idx) => {
     let div = document.createElement("div");
     div.className = "mod-item";
     div.style.animationDelay = (idx * 0.03) + "s";
@@ -179,24 +205,36 @@ function renderMods(mods) {
     checkbox.addEventListener("change", () => {
       if (checkbox.checked) selectedMods.add(mod.slug);
       else selectedMods.delete(mod.slug);
-      updateSelectedCount();
       downloadBtn.disabled = selectedMods.size === 0;
+      selectedCountSpan.textContent = selectedMods.size;
     });
-    
-    let checkboxWrapper = document.createElement("div");
-    checkboxWrapper.className = "checkbox-wrapper";
-    checkboxWrapper.appendChild(checkbox);
-    div.appendChild(checkboxWrapper);
+    div.appendChild(checkbox);
 
-    // Mod icon
-    let thumb = document.createElement("img");
-    thumb.className = "mod-thumb";
-    thumb.src = mod.icon_url || "https://i.imgur.com/OnjVZqV.png";
-    thumb.alt = mod.title;
-    thumb.addEventListener("error", () => {
-      thumb.src = "https://i.imgur.com/OnjVZqV.png";
-    });
-    div.appendChild(thumb);
+    // Don't show thumb in small views
+    if (!currentView.includes('small')) {
+      if (currentView === 'grid') {
+        let thumbContainer = document.createElement("div");
+        thumbContainer.className = "mod-thumb-container";
+        
+        let thumb = document.createElement("img");
+        thumb.className = "mod-thumb";
+        thumb.src = mod.icon_url || "https://i.imgur.com/OnjVZqV.png";
+        thumb.alt = mod.title;
+        thumb.loading = "lazy";
+        thumb.onerror = () => { thumb.src = "https://i.imgur.com/OnjVZqV.png"; };
+        
+        thumbContainer.appendChild(thumb);
+        div.appendChild(thumbContainer);
+      } else {
+        let thumb = document.createElement("img");
+        thumb.className = "mod-thumb";
+        thumb.src = mod.icon_url || "https://i.imgur.com/OnjVZqV.png";
+        thumb.alt = mod.title;
+        thumb.loading = "lazy";
+        thumb.onerror = () => { thumb.src = "https://i.imgur.com/OnjVZqV.png"; };
+        div.appendChild(thumb);
+      }
+    }
 
     // Info
     let infoDiv = document.createElement("div");
@@ -224,54 +262,39 @@ function renderMods(mods) {
     // Downloads
     let downloads = document.createElement("span");
     downloads.className = "mod-downloads";
-    downloads.innerHTML = mod.downloads ? `<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 15.575q-.2 0-.375-.063-.175-.062-.325-.212l-3.6-3.6q-.3-.3-.3-.7 0-.4.3-.7.3-.3.713-.3.412 0 .712.3l1.875 1.9V5q0-.425.288-.713Q11.575 4 12 4t.712.287Q13 4.575 13 5v7.2l1.875-1.9q.3-.3.713-.3.412 0 .712.3.3.3.3.7 0 .4-.3.7l-3.6 3.6q-.15.15-.325.212-.175.063-.375.063ZM6.15 20q-.775 0-1.337-.562-.563-.563-.563-1.338v-2.1h2V18q0 0 .15.15.15.15.15.15h12q0 0 .15-.15.15-.15.15-.15v-2h2v2.1q0 .775-.562 1.338Q17.725 20 16.95 20Z"/></svg> ${mod.downloads.toLocaleString()}` : '';
+    downloads.innerHTML = mod.downloads ? `<i class="fas fa-download"></i> ${formatNumber(mod.downloads)}` : '';
     meta.appendChild(downloads);
     
-    // Updated date
-    if (mod.date_modified) {
-      let updated = document.createElement("span");
-      updated.className = "mod-updated";
-      let dateObj = new Date(mod.date_modified);
-      updated.innerHTML = `<svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 21q-3.75 0-6.375-2.625T3 12t2.625-6.375T12 3q3.75 0 6.375 2.625T21 12q0 3.75-2.625 6.375T12 21Zm0-2q2.9 0 4.95-2.05Q19 14.9 19 12t-2.05-4.95Q14.9 5 12 5 9.1 5 7.05 7.05 5 9.1 5 12t2.05 4.95Q9.1 19 12 19Zm.5-8h3q.425 0 .713-.288Q16.5 10.425 16.5 10t-.287-.713Q15.925 9 15.5 9h-2.5V6q0-.425-.288-.713Q12.425 5 12 5t-.712.287Q11 5.575 11 6v5q0 .425.288.713.287.287.712.287Z"/></svg> ${dateObj.toLocaleDateString()}`;
-      meta.appendChild(updated);
-    }
-    
-    // Categories
+    // Category
     if (mod.categories && mod.categories.length) {
-      let catContainer = document.createElement("div");
-      catContainer.className = "mod-categories";
-      
-      mod.categories.forEach(catName => {
-        // Skip loader categories
-        if(['fabric', 'forge', 'quilt'].includes(catName)) return;
-        
+      let catName = mod.categories.find(c =>
+        categories.find(cat => cat.name === c)
+      );
+      if (catName) {
         let catSpan = document.createElement("span");
         catSpan.className = "mod-category";
         catSpan.textContent = catName.charAt(0).toUpperCase() + catName.slice(1);
-        catContainer.appendChild(catSpan);
-      });
-      
-      infoDiv.appendChild(catContainer);
+        meta.appendChild(catSpan);
+      }
     }
     
     infoDiv.appendChild(meta);
     div.appendChild(infoDiv);
-    
-    // View on Modrinth button
-    let linkBtn = document.createElement("a");
-    linkBtn.className = "mod-link-btn";
-    linkBtn.href = `https://modrinth.com/mod/${mod.slug}`;
-    linkBtn.target = "_blank";
-    linkBtn.innerHTML = `<svg viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M18 19H6c-.55 0-1-.45-1-1V6c0-.55.45-1 1-1h5c.55 0 1-.45 1-1s-.45-1-1-1H5c-1.11 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-6c0-.55-.45-1-1-1s-1 .45-1 1v5c0 .55-.45 1-1 1zM14 4c0 .55.45 1 1 1h2.59l-9.13 9.13c-.39.39-.39 1.02 0 1.41.39.39 1.02.39 1.41 0L19 6.41V9c0 .55.45 1 1 1s1-.45 1-1V4c0-.55-.45-1-1-1h-5c-.55 0-1 .45-1 1z"/></svg>`;
-    div.appendChild(linkBtn);
-    
     modListDiv.appendChild(div);
   });
-  
-  updateSelectedCount();
-  downloadBtn.disabled = selectedMods.size === 0;
 }
 
+// Format numbers in a readable way (e.g. 1.2M)
+function formatNumber(num) {
+  if (num >= 1000000) {
+    return (num / 1000000).toFixed(1) + 'M';
+  } else if (num >= 1000) {
+    return (num / 1000).toFixed(1) + 'K';
+  }
+  return num.toLocaleString();
+}
+
+// Filter mods based on search query
 function filterMods() {
   let q = searchBox.value.trim().toLowerCase();
   if (!q) {
@@ -280,18 +303,42 @@ function filterMods() {
     shownMods = allMods.filter(mod =>
       mod.title.toLowerCase().includes(q) ||
       mod.slug.toLowerCase().includes(q) ||
-      (mod.description || "").toLowerCase().includes(q) ||
-      (mod.categories || []).some(cat => cat.toLowerCase().includes(q))
+      (mod.description || "").toLowerCase().includes(q)
     );
   }
-  renderMods(shownMods);
-  resultsCount.textContent = `Found ${shownMods.length} mods`;
+  renderVisibleMods();
 }
 
+// Load next page of mods
+async function loadMoreMods() {
+  if (isLoading || currentPage >= totalPages) return;
+  
+  currentPage++;
+  let version = mcVersionSelect.value;
+  let loader = modLoaderSelect.value;
+  let category = categorySelect.value;
+  let sortOrder = sortOrderSelect.value;
+  let search = searchBox.value.trim();
+  
+  const newMods = await fetchMods(version, loader, search, category, sortOrder, currentPage);
+  allMods = [...allMods, ...newMods];
+  shownMods = allMods;
+  
+  if (search) {
+    filterMods();
+  } else {
+    renderVisibleMods();
+  }
+  
+  statusDiv.textContent = `Loaded ${allMods.length} mods.`;
+}
+
+// Reload all mods (clear and fetch new ones)
 async function reloadMods() {
   selectedMods.clear();
   downloadBtn.disabled = true;
-  selectionInfo.style.display = 'none';
+  selectedCountSpan.textContent = "0";
+  currentPage = 1;
   
   let version = mcVersionSelect.value;
   let loader = modLoaderSelect.value;
@@ -299,84 +346,35 @@ async function reloadMods() {
   let sortOrder = sortOrderSelect.value;
   let search = searchBox.value.trim();
   
-  modListDiv.innerHTML = `
-    <div class="loading-spinner">
-      <div class="spinner"></div>
-      <p>Loading mods...</p>
-    </div>
-  `;
-  
-  allMods = await fetchMods(version, loader, search, category, sortOrder);
+  allMods = await fetchMods(version, loader, search, category, sortOrder, 1);
   shownMods = allMods;
-  renderMods(shownMods);
   
-  // Show success message with count
-  if (allMods.length > 0) {
-    statusDiv.innerHTML = `<div class="status-message success">Successfully loaded ${allMods.length} mods</div>`;
-    setTimeout(() => {
-      clearStatus();
-    }, 3000);
-  }
+  renderVisibleMods();
+  statusDiv.textContent = `Loaded ${allMods.length} mods.`;
 }
 
-function setLoading(loading) {
-  isLoading = loading;
-  document.body.classList.toggle('is-loading', loading);
-}
-
-function showError(message) {
-  statusDiv.innerHTML = `<div class="status-message error">${message}</div>`;
-}
-
-function clearStatus() {
-  statusDiv.innerHTML = "";
-}
-
+// Event Listeners
 filterForm.addEventListener('submit', async (e) => {
   e.preventDefault();
-  if (!isLoading) {
-    await reloadMods();
-  }
+  await reloadMods();
 });
 
 searchBox.addEventListener('input', filterMods);
+loadMoreBtn.addEventListener('click', loadMoreMods);
 
-// Add animation class on select change
-[categorySelect, sortOrderSelect, mcVersionSelect, modLoaderSelect].forEach(select => {
-  select.addEventListener('change', function() {
-    this.classList.add('changed');
-    setTimeout(() => {
-      this.classList.remove('changed');
-    }, 500);
-  });
-});
-
+// Event listener for downloading selected mods
 downloadBtn.addEventListener('click', async () => {
   if (!selectedMods.size) return;
+  
   let modsToDownload = shownMods.filter(m => selectedMods.has(m.slug));
   let version = mcVersionSelect.value;
   let loader = modLoaderSelect.value;
   
-  downloadBtn.disabled = true;
-  statusDiv.innerHTML = `<div class="status-message loading">Preparing to download ${modsToDownload.length} mods...</div>`;
-  
-  // Create progress bar
-  const progressContainer = document.createElement('div');
-  progressContainer.className = 'progress-container';
-  const progressBar = document.createElement('div');
-  progressBar.className = 'progress-bar';
-  progressContainer.appendChild(progressBar);
-  statusDiv.appendChild(progressContainer);
-  
-  let successful = 0;
-  let failed = 0;
+  statusDiv.textContent = "Fetching mod files...";
   
   for (let i = 0; i < modsToDownload.length; i++) {
     let mod = modsToDownload[i];
-    
-    // Update progress bar
-    progressBar.style.width = `${Math.round((i / modsToDownload.length) * 100)}%`;
-    statusDiv.querySelector('.status-message').textContent = `Downloading ${mod.title} (${i+1}/${modsToDownload.length})...`;
+    statusDiv.textContent = `Downloading ${mod.title} (${i+1}/${modsToDownload.length})...`;
     
     try {
       let vurl = `${MODRINTH_API}/project/${mod.slug}/version?game_versions=["${version}"]&loaders=["${loader}"]`;
@@ -384,21 +382,13 @@ downloadBtn.addEventListener('click', async () => {
       let versions = await vresp.json();
       
       if (!versions.length) {
-        failed++;
-        const errorMsg = document.createElement('div');
-        errorMsg.className = 'download-error';
-        errorMsg.textContent = `${mod.title}: No compatible version found`;
-        statusDiv.appendChild(errorMsg);
+        statusDiv.textContent += `\nNo compatible version for ${mod.title}.`;
         continue;
       }
       
       let file = versions[0].files.find(f => f.filename.endsWith(".jar"));
       if (!file) {
-        failed++;
-        const errorMsg = document.createElement('div');
-        errorMsg.className = 'download-error';
-        errorMsg.textContent = `${mod.title}: No JAR file found`;
-        statusDiv.appendChild(errorMsg);
+        statusDiv.textContent += `\nNo jar file for ${mod.title}.`;
         continue;
       }
       
@@ -412,49 +402,50 @@ downloadBtn.addEventListener('click', async () => {
       document.body.removeChild(a);
       
       // Animate download button
-      downloadBtn.classList.add('downloaded');
+      downloadBtn.classList.add("downloading");
       setTimeout(() => {
-        downloadBtn.classList.remove('downloaded');
-      }, 500);
+        downloadBtn.classList.remove("downloading");
+      }, 300);
       
-      successful++;
-      
-      // Small delay between downloads to prevent browser from blocking
+      // Add a small delay between downloads to prevent browser throttling
       await new Promise(resolve => setTimeout(resolve, 300));
     } catch (e) {
-      failed++;
-      const errorMsg = document.createElement('div');
-      errorMsg.className = 'download-error';
-      errorMsg.textContent = `${mod.title}: ${e.message}`;
-      statusDiv.appendChild(errorMsg);
+      statusDiv.textContent += `\nError downloading ${mod.title}: ${e}`;
     }
   }
   
-  // Complete progress bar
-  progressBar.style.width = '100%';
-  progressBar.classList.add('complete');
-  
-  // Summary message
-  const summary = document.createElement('div');
-  summary.className = 'download-summary';
-  summary.innerHTML = `
-    <div class="summary-title">Download Complete</div>
-    <div class="summary-stats">
-      <div class="stat"><span class="stat-value">${successful}</span> mods downloaded successfully</div>
-      ${failed > 0 ? `<div class="stat error"><span class="stat-value">${failed}</span> mods failed</div>` : ''}
-    </div>
-    <div class="summary-message">Files have been saved to your downloads folder</div>
-  `;
-  statusDiv.innerHTML = '';
-  statusDiv.appendChild(summary);
-  
-  downloadBtn.disabled = false;
+  statusDiv.textContent = "All done! Check your downloads folder.";
 });
 
+// Initialize the application
 window.addEventListener("DOMContentLoaded", async () => {
-  setLoading(true);
+  initViewMode();
   await fetchVersions();
   await fetchCategories();
   await reloadMods();
-  setLoading(false);
 });
+
+// Add event listeners for category select and sort order changes
+categorySelect.addEventListener('change', () => {
+  // Update active category tags based on dropdown selection
+  activeCategoryTags.clear();
+  if (categorySelect.value) {
+    activeCategoryTags.add(categorySelect.value);
+  }
+  renderCategoryTags();
+  reloadMods();
+});
+
+sortOrderSelect.addEventListener('change', reloadMods);
+mcVersionSelect.addEventListener('change', reloadMods);
+modLoaderSelect.addEventListener('change', reloadMods);
+
+// Memory optimization: Use IntersectionObserver to detect when list is scrolled
+const observer = new IntersectionObserver((entries) => {
+  if (entries[0].isIntersecting && !isLoading && currentPage < totalPages) {
+    loadMoreMods();
+  }
+}, { rootMargin: '200px' });
+
+// Observe the load more button for infinite scroll-like behavior
+observer.observe(loadMoreBtn);
