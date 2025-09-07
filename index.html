@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Modrinth Bulk Mod Downloader</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Modrinth Bulk Mod Downloader</h1>
+    <form id="filterForm">
+      <label for="mcVersion">Minecraft Version:</label>
+      <select id="mcVersion"></select>
+      <label for="modLoader">Loader:</label>
+      <select id="modLoader">
+        <option value="fabric">Fabric</option>
+        <option value="forge">Forge</option>
+        <option value="neoforge">NeoForge</option>
+        <option value="quilt">Quilt</option>
+      </select>
+      <button type="submit">Show Mods</button>
+    </form>
+    <input id="searchBox" type="text" placeholder="Search mods...">
+    <div id="modList"></div>
+    <button id="downloadBtn" disabled>Download Selected Mods</button>
+    <div id="status"></div>
+    <footer>
+      <p>Made for Minecraft modpack makers. Powered by <a href="https://modrinth.com/" target="_blank">Modrinth API</a>.</p>
+      <p>Open source on <a href="https://github.com/BrysWU/modrinth-bulk-downloader" target="_blank">GitHub</a></p>
+    </footer>
+  </div>
+  <script src="main.js"></script>
+</body>
+</html>

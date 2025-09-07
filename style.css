@@ -1,0 +1,109 @@
+body {
+  font-family: 'Segoe UI', Arial, sans-serif;
+  background: #1b1b1b;
+  color: #eaeaea;
+  margin: 0;
+  padding: 0;
+}
+
+.container {
+  max-width: 760px;
+  margin: 40px auto 0 auto;
+  padding: 24px;
+  background: #222;
+  border-radius: 10px;
+  box-shadow: 0 4px 24px 8px #0006;
+}
+
+h1 {
+  margin-top: 0;
+  font-size: 2em;
+}
+
+form,
+#searchBox,
+#downloadBtn {
+  margin-bottom: 1em;
+}
+
+label {
+  margin-right: 8px;
+}
+
+select, input[type="text"] {
+  padding: 4px 8px;
+  margin-right: 12px;
+  border-radius: 4px;
+  border: none;
+  background: #2d2d2d;
+  color: #fff;
+}
+
+#modList {
+  margin-bottom: 1em;
+  max-height: 480px;
+  overflow-y: auto;
+  border: 1px solid #333;
+  border-radius: 8px;
+  background: #181818;
+  padding: 8px;
+}
+
+.mod-item {
+  display: flex;
+  align-items: flex-start;
+  padding: 8px 0;
+  border-bottom: 1px solid #282828;
+}
+
+.mod-item:last-child {
+  border-bottom: none;
+}
+
+.mod-title {
+  font-weight: bold;
+  margin-bottom: 2px;
+}
+
+.mod-desc {
+  font-size: 0.95em;
+  color: #aaa;
+  margin-bottom: 2px;
+}
+
+.mod-checkbox {
+  margin-right: 12px;
+  margin-top: 2px;
+  scale: 1.2;
+}
+
+#downloadBtn {
+  padding: 10px 20px;
+  font-size: 1em;
+  background: #019c49;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background 0.2s;
+}
+
+#downloadBtn:disabled {
+  background: #555;
+  cursor: not-allowed;
+}
+
+#status {
+  min-height: 32px;
+  margin-top: 8px;
+  font-size: 1em;
+}
+
+footer {
+  margin-top: 32px;
+  font-size: 0.95em;
+  color: #888;
+  text-align: center;
+}
+footer a { color: #4fdc8e; }
